@@ -22,7 +22,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./frontend
-          File: ./frontend/Dockerfile
+          File: ./frontend/my-react-app/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/react-frontend:latest
 
