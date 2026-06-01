@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/myapp';
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected successfully'))
+  .then(() => console.log('✅ MongoDB connected successfully11'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
 const UserSchema = new mongoose.Schema({ name: String });
