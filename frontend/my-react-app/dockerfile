@@ -5,13 +5,13 @@ FROM node:18-alpine AS build
 WORKDIR /app
 
 # Copy package.json and package-lock.json first to leverage Docker cache
-COPY package.json ./
+COPY /my-react-app/package.json ./
 
 # Install dependencies
 RUN npm install
 
 # Copy the rest of the application code
-COPY . .
+COPY /my-react-app/. .
 
 # Build the app for production
 # Note: If you are using Vite, this creates a 'dist' folder instead of 'build'
