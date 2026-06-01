@@ -7,7 +7,7 @@ WORKDIR /app
 COPY frontend/my-react-app/package*.json ./
 RUN npm cache clean --force && npm install
 
-COPY frontend/my-react-app/. ./
+COPY . .
 RUN npm run build
 
 
