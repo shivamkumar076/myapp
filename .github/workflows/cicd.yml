@@ -6,41 +6,60 @@ on:
       - main
 
 jobs:
+  # ----------------------------------------
+  # JOB 1: BUILD & PUSH TO DOCKERHUB
+  # ----------------------------------------
   build-and-push:
     runs-on: ubuntu-latest
+    
+    # Niche wale job (deploy) ko naya tag pass karne ke liye output set kiya
+    outputs:
+      image_tag: ${{ steps.vars.outputs.TAG }}
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4   # ✅ updated
+        uses: actions/checkout@v4
+
+      - name: Generate Unique Tag (Commit ID)
+        id: vars
+        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
       - name: Log in to DockerHub
-        uses: docker/login-action@v3   # ✅ updated
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and Push Frontend Image
-        uses: docker/build-push-action@v5   # ✅ updated
+        uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          file: ./frontend/my-react-app/dockerfile
+          file: ./frontend/my-react-app/Dockerfile # Dhyan rahe, 'Dockerfile' ka D capital ho
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/react-frontend:latest
+          # Hum yahan do tag daalenge: Ek unique aur ek latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/react-frontend:${{ steps.vars.outputs.TAG }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/react-frontend:latest
 
       - name: Build and Push Backend Image
-        uses: docker/build-push-action@v5   # ✅ updated
+        uses: docker/build-push-action@v5
         with:
           context: ./backend
-          file: ./backend/dockerfile
+          file: ./backend/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/node-backend:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/node-backend:${{ steps.vars.outputs.TAG }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/node-backend:latest
 
+  # ----------------------------------------
+  # JOB 2: DEPLOY TO KUBERNETES
+  # ----------------------------------------
   deploy-to-k8s:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Ise v4 par update kar diya
 
       - name: Set up Kubeconfig
         uses: azure/k8s-set-context@v3
@@ -50,11 +69,24 @@ jobs:
 
       - name: Deploy to Kubernetes
         run: |
+          # 1. Pehle basic setup (configs, secrets, DB) apply karo
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secrets.yaml
           kubectl apply -f k8s/mongo.yaml
+          
+          # 2. Frontend & Backend ke purane yaml apply karo (in case koi env/port change ho)
           kubectl apply -f k8s/backend.yaml
           kubectl apply -f k8s/frontend.yaml
           
-          kubectl rollout restart deployment/backend-deployment
-          kubectl rollout restart deployment/frontend-deployment 
+          # 3. NAYA MAGIC: K8s ko exact naya Image Tag do
+          # Yeh command automatic zero-downtime rolling update start kar degi
+          TAG=${{ needs.build-and-push.outputs.image_tag }}
+          
+          # NOTE: Niche "backend=" aur "frontend=" wahi naam hone chahiye jo k8s yaml mein container ka naam hai
+          kubectl set image deployment/backend-deployment backend=${{ secrets.DOCKERHUB_USERNAME }}/node-backend:$TAG
+          kubectl set image deployment/frontend-deployment frontend=${{ secrets.DOCKERHUB_USERNAME }}/react-frontend:$TAG
+          
+          # 4. Check karo ki properly chal gaya ya crash hua
+          echo "Waiting for pods to be ready..."
+          kubectl rollout status deployment/backend-deployment
+          kubectl rollout status deployment/frontend-deployment
